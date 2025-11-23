@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Voice Banking Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        .assistant-card {
+            background-color: white;
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+            max-width: 480px;
+            width: 100%;
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+        }
+        .chat-container {
+            height: 300px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+        }
+        .user-message {
+            align-self: flex-end;
+            background-color: #3b82f6;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 1rem 1rem 0 1rem;
+            margin-bottom: 0.5rem;
+            max-width: 80%;
+        }
+        .assistant-message {
+            align-self: flex-start;
+            background-color: #e5e7eb;
+            color: #1f2937;
+            padding: 0.5rem 1rem;
+            border-radius: 1rem 1rem 1rem 0;
+            margin-bottom: 0.5rem;
+            max-width: 80%;
+        }
+        .mic-button {
+            transition: all 0.2s;
+        }
+        .mic-active {
+            animation: pulse-red 1.5s infinite;
+            background-color: #ef4444; /* Red for active/recording */
+        }
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="assistant-card">
+    <!-- Header -->
+    <header class="bg-indigo-600 p-4 flex items-center justify-between text-white">
+        <h1 class="text-xl font-semibold">Voice Banking Assistant</h1>
+        <span id="account-status" class="text-xs bg-green-500 py-1 px-3 rounded-full">Securely Logged In</span>
+    </header>
+
+    <!-- Account Dashboard -->
+    <div class="p-4 border-b border-gray-100">
+        <div class="flex justify-between items-center mb-2">
+            <p class="text-gray-500 text-sm">Primary Account Balance</p>
+            <p id="current-balance" class="text-2xl font-bold text-indigo-700">₹ 85,340.50</p>
+        </div>
+        <button onclick="viewTransactions()" class="text-xs text-indigo-600 hover:text-indigo-800 transition">View Transactions (History)</button>
+    </div>
+
+    <!-- Chat Window -->
+    <div id="chat-window" class="chat-container">
+        <div class="assistant-message">Hello! I'm your AI Banking Assistant. How can I help you with your finances today? Try saying, "What is my balance?"</div>
+    </div>
+
+    <!-- Controls -->
+    <div class="p-4 border-t border-gray-100 flex items-center justify-between">
+        <button id="mic-btn" class="mic-button bg-indigo-600 text-white p-4 rounded-full shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-300" onclick="toggleSpeechRecognition()">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7v0a7 7 0 01-7-7v0M12 18v3m4-3h-8" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 9V5a3 3 0 00-6 0v4m3 0a3 3 0 110-6m0 6a3 3 0 110-6" />
+            </svg>
+        </button>
+        <p id="mic-status" class="text-gray-500 text-sm italic ml-4">Tap to Speak</p>
+    </div>
+
+    <!-- Hidden Modal for PIN/OTP Simulation -->
+    <div id="pin-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-6 rounded-lg shadow-2xl w-full max-w-sm">
+            <h3 class="text-lg font-semibold mb-4" id="modal-title">Confirm Transaction</h3>
+            <p class="text-sm text-gray-700 mb-4" id="modal-message">Please enter your 4-digit PIN to authorize the transaction.</p>
+            <input type="password" id="pin-input" class="w-full p-2 border border-gray-300 rounded-md text-center text-xl tracking-widest" maxlength="4">
+            <div class="flex justify-end space-x-3 mt-4">
+                <button onclick="hidePinModal()" class="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-100">Cancel</button>
+                <button onclick="verifyPin()" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700" id="modal-confirm-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Mock Data Store (Simulating Database)
+    let mockAccount = {
+        balance: 85340.50, // Mock Balance
+        pin: "1234",      // Mock PIN for security check
+        transactions: [
+            { date: '2025-10-28', description: 'Salary Deposit', amount: 50000.00, type: 'credit' },
+            { date: '2025-10-30', description: 'Grocery Store', amount: -3500.25, type: 'debit' },
+            { date: '2025-11-05', description: 'Online Subscription', amount: -999.00, type: 'debit' },
+            { date: '2025-11-20', description: 'Transfer from Jane', amount: 15000.00, type: 'credit' },
+        ]
+    };
+
+    // State for Transfer flow
+    let transactionState = {
+        intent: null,
+        recipient: null,
+        amount: null,
+        pinRequired: false
+    };
+
+    // DOM Elements
+    const chatWindow = document.getElementById('chat-window');
+    const balanceDisplay = document.getElementById('current-balance');
+    const micBtn = document.getElementById('mic-btn');
+    const micStatus = document.getElementById('mic-status');
+    const pinModal = document.getElementById('pin-modal');
+    const pinInput = document.getElementById('pin-input');
+
+    // Speech APIs
+    const recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognizer = null;
+    const synth = window.speechSynthesis;
+
+    // --- Core UI & Setup Functions ---
+
+    function updateBalanceDisplay() {
+        balanceDisplay.textContent = '₹ ' + mockAccount.balance.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+    function addMessage(text, sender) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = sender === 'user' ? 'user-message' : 'assistant-message';
+        msgDiv.textContent = text;
+        chatWindow.appendChild(msgDiv);
+        chatWindow.scrollTop = chatWindow.scrollHeight; // Auto-scroll to latest
+    }
+
+    function speak(text) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.1; // Slightly faster
+        utterance.pitch = 1.0;
+        utterance.voice = synth.getVoices().find(voice => voice.name.includes('Google') || voice.lang.includes('en'));
+        synth.speak(utterance);
+        addMessage(text, 'assistant');
+    }
+
+    // --- Speech Recognition Logic (STT) ---
+
+    function initializeRecognizer() {
+        if (recognizer) return;
+
+        if (recognition) {
+            recognizer = new recognition();
+            recognizer.continuous = false; // Stop after a single utterance
+            recognizer.lang = 'en-US';
+
+            recognizer.onstart = () => {
+                micBtn.classList.add('mic-active');
+                micStatus.textContent = "Listening... Speak now.";
+            };
+
+            recognizer.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                processCommand(transcript);
+            };
+
+            recognizer.onend = () => {
+                micBtn.classList.remove('mic-active');
+                micStatus.textContent = "Tap to Speak";
+            };
+
+            recognizer.onerror = (event) => {
+                console.error('Speech recognition error', event);
+                speak("I'm sorry, I encountered an error. Could you please try again?");
+                micBtn.classList.remove('mic-active');
+                micStatus.textContent = "Tap to Speak";
+            };
+        } else {
+            micStatus.textContent = "Speech Recognition not supported in this browser.";
+            micBtn.disabled = true;
+        }
+    }
+
+    function toggleSpeechRecognition() {
+        if (!recognizer) initializeRecognizer();
+
+        try {
+            recognizer.start();
+        } catch (e) {
+            // Error if already running
+            if (e.name !== 'InvalidStateError') {
+                 console.error("Recognizer start error:", e);
+            }
+        }
+    }
+
+    // --- Dialogue Management & NLU Simulation ---
+
+    function processCommand(command) {
+        // 1. Log the user command
+        addMessage(command, 'user');
+        const lowerCommand = command.toLowerCase();
+
+        // 2. Intent Identification (Simulated NLU)
+
+        // Handle Transfer State flow
+        if (transactionState.intent === 'transfer') {
+            handleTransferFlow(lowerCommand);
+            return;
+        }
+
+        // Check Balance Intent
+        if (lowerCommand.includes('balance') || lowerCommand.includes('how much money')) {
+            handleBalanceInquiry();
+        }
+        // Fund Transfer Intent
+        else if (lowerCommand.includes('transfer') || lowerCommand.includes('send money') || lowerCommand.includes('pay')) {
+            handleTransferIntent(lowerCommand);
+        }
+        // Transaction History Intent
+        else if (lowerCommand.includes('transaction') || lowerCommand.includes('history') || lowerCommand.includes('what i spent')) {
+            viewTransactions();
+        }
+        // Loan Inquiry Intent (Mock Response)
+        else if (lowerCommand.includes('loan') || lowerCommand.includes('interest rate') || lowerCommand.includes('credit limit')) {
+            handleLoanInquiry();
+        }
+        // General Greeting/Fallback Intent
+        else if (lowerCommand.includes('hello') || lowerCommand.includes('hi') || lowerCommand.includes('hey')) {
+            speak("Hello! I can check your balance, transfer funds, or view transactions.");
+        }
+        // Fallback
+        else {
+            speak("I didn't quite catch that. Please ask me to check your balance, make a transfer, or view your history.");
+        }
+    }
+
+    // --- Intent Handlers (Simulated Banking API) ---
+
+    function handleBalanceInquiry() {
+        const formattedBalance = mockAccount.balance.toFixed(2);
+        speak(`Your current primary account balance is ${formattedBalance} rupees.`);
+    }
+
+    function viewTransactions() {
+        const lastThree = mockAccount.transactions.slice(-3).reverse();
+        let historyText = "Your last three transactions were: ";
+        lastThree.forEach((t, index) => {
+            const amountText = t.type === 'debit' ? `a debit of ${t.amount}` : `a credit of ${t.amount}`;
+            historyText += `${index + 1}. ${t.description} on ${t.date} for ${amountText}. `;
+        });
+        speak(historyText);
+    }
+
+    function handleLoanInquiry() {
+        speak("We offer a fixed 8.5% interest rate on personal loans up to 10 lakh rupees. Would you like to check your eligibility?");
+    }
+
+    function handleTransferIntent(command) {
+        // Simple Entity Extraction (E.g., "transfer 5000 to John")
+        const amountMatch = command.match(/(\d+(?:\.\d+)?)\s*(rupees|rs|dollars|k)/i);
+        const recipientMatch = command.match(/to\s+(\w+)/i);
+
+        let amount = amountMatch ? parseFloat(amountMatch[1]) : null;
+        if (amountMatch && amountMatch[2] && amountMatch[2].toLowerCase() === 'k') {
+            amount *= 1000;
+        }
+
+        let recipient = recipientMatch ? recipientMatch[1] : null;
+
+        // Initialize transaction state
+        transactionState.intent = 'transfer';
+        transactionState.amount = amount;
+        transactionState.recipient = recipient;
+        transactionState.pinRequired = false; // Reset security flag
+
+        // Dialogue Management: Check for missing information
+        if (!amount || !recipient) {
+            let prompt = "I need a little more information. ";
+            if (!amount) prompt += "How much money would you like to transfer? ";
+            if (!recipient) prompt += "And who are you transferring to? ";
+            speak(prompt);
+        } else {
+            // All info present, move to confirmation
+            const prompt = `Confirm transfer of ${amount.toFixed(2)} rupees to ${recipient}?`;
+            speak(prompt);
+            transactionState.pinRequired = true; // Set flag to trigger PIN modal next
+        }
+    }
+
+    function handleTransferFlow(command) {
+        const lowerCommand = command.toLowerCase();
+
+        // 1. Fill missing amount/recipient if provided
+        if (!transactionState.amount) {
+            const amountMatch = lowerCommand.match(/(\d+(?:\.\d+)?)\s*(rupees|rs|dollars|k)/i);
+            if (amountMatch) {
+                let amount = parseFloat(amountMatch[1]);
+                if (amountMatch[2] && amountMatch[2].toLowerCase() === 'k') amount *= 1000;
+                transactionState.amount = amount;
+            }
+        }
+        if (!transactionState.recipient) {
+            const recipientMatch = lowerCommand.match(/to\s+(\w+)/i) || lowerCommand.match(/(\w+)$/i);
+            if (recipientMatch) {
+                transactionState.recipient = recipientMatch[1].replace('to', '').trim();
+            }
+        }
+
+        // 2. Re-check if information is complete
+        if (!transactionState.amount || !transactionState.recipient) {
+            let prompt = "Still missing some details. ";
+            if (!transactionState.amount) prompt += "Please tell me the amount. ";
+            if (!transactionState.recipient) prompt += "Please tell me the recipient's name. ";
+            speak(prompt);
+            return;
+        }
+
+        // 3. Confirmation & Security Check
+        if (lowerCommand.includes('yes') || lowerCommand.includes('confirm') || lowerCommand.includes('proceed')) {
+            const amount = transactionState.amount;
+            const recipient = transactionState.recipient;
+
+            // Mock check for high-value transfer (e.g., > 10,000 requires PIN)
+            if (amount > 10000 || transactionState.pinRequired) {
+                showPinModal(amount, recipient);
+            } else {
+                // Low-value transfer, proceed without PIN for demo
+                executeTransfer(amount, recipient);
+            }
+        } else if (lowerCommand.includes('no') || lowerCommand.includes('cancel')) {
+            speak("Transaction cancelled. What else can I help you with?");
+            resetTransactionState();
+        } else {
+            // Prompt for final confirmation
+            speak(`I understood you want to send ${transactionState.amount.toFixed(2)} rupees to ${transactionState.recipient}. Should I proceed? Say 'Yes' or 'No'.`);
+            transactionState.pinRequired = true; // Ensure confirmation is forced next time
+        }
+    }
+
+    function resetTransactionState() {
+        transactionState = { intent: null, recipient: null, amount: null, pinRequired: false };
+    }
+
+    // --- Security (PIN/OTP) Handlers ---
+
+    function showPinModal(amount, recipient) {
+        document.getElementById('modal-title').textContent = `Authorize Transfer of ₹${amount.toFixed(2)}`;
+        document.getElementById('modal-message').textContent = `A transfer of ₹${amount.toFixed(2)} to ${recipient} requires your secure 4-digit PIN.`;
+        pinInput.value = '';
+        pinModal.classList.remove('hidden');
+    }
+
+    function hidePinModal() {
+        pinModal.classList.add('hidden');
+        pinInput.value = '';
+        speak("Security authorization cancelled. The transfer was not completed.");
+        resetTransactionState();
+    }
+
+    function verifyPin() {
+        const enteredPin = pinInput.value;
+        if (enteredPin === mockAccount.pin) {
+            hidePinModal();
+            executeTransfer(transactionState.amount, transactionState.recipient);
+        } else {
+            speak("Incorrect PIN. Please try again or cancel.");
+            pinInput.value = '';
+        }
+    }
+
+    // --- Final Execution ---
+
+    function executeTransfer(amount, recipient) {
+        if (amount > mockAccount.balance) {
+            speak("Transfer failed. Insufficient funds in your primary account.");
+        } else {
+            // Simulate API execution
+            mockAccount.balance -= amount;
+            mockAccount.transactions.push({
+                date: new Date().toISOString().slice(0, 10),
+                description: `Transfer to ${recipient}`,
+                amount: -amount,
+                type: 'debit'
+            });
+
+            updateBalanceDisplay();
+            speak(`Success! ₹${amount.toFixed(2)} has been securely transferred to ${recipient}. Your new balance is ₹${mockAccount.balance.toFixed(2)}.`);
+        }
+        resetTransactionState();
+    }
+
+    // Initialize on load
+    window.onload = () => {
+        updateBalanceDisplay();
+        initializeRecognizer();
+    };
+
+</script>
+</body>
+</html>
